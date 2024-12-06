@@ -1,4 +1,4 @@
-# Bluesky SEO Feed Generator
+# Daily SEO Feed (Bluesky)
 
 A custom feed generator for Bluesky that surfaces high-quality SEO content based on expert engagement. Built with Python using the AT Protocol SDK.
 
@@ -46,20 +46,34 @@ python publish_feed.py
 
 ## Running the Service
 
-### Development Mode
-```bash
-flask --debug run
-```
+There are several ways to run the service based on your needs:
 
-### Production Mode
+### Full Service Mode
+Run both the API server and Jetstream processor together:
 ```bash
 python -m server
 ```
 
 ### Component Separation
 You can run components separately:
-- API only: `python -m server --app_only`
-- Firehose only: `python -m server --firehose_only`
+
+#### API Server Only
+Run just the web API and interface:
+```bash
+python -m server --app_only
+```
+
+#### Jetstream Processor Only
+Run just the data processing component:
+```bash
+python -m server --jetstream_only
+```
+
+### Development Mode
+Run with debug logging enabled:
+```bash
+python -m server --debug
+```
 
 ## Endpoints
 
