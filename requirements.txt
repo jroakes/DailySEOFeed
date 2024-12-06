@@ -1,0 +1,9 @@
+atproto
+peewee
+Flask
+python-dotenv
+gunicorn
+PyMySQL
+tqdm
+websocket-client
+zstandard

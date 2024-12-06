@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily SEO Feed Overview</title>
+    <style>
+        body {
+            background-color: #f0f2f5;
+            font-family: Arial, sans-serif;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        header {
+            background-color: #3b5998;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .message {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            color: #666;
+            font-size: 16px;
+        }
+
+        .post {
+            background-color: white;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .post:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        }
+
+        .post-author {
+            font-weight: bold;
+            color: #3b5998;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .post-text {
+            margin: 10px 0;
+            font-size: 15px;
+            color: #1c1e21;
+            word-wrap: break-word;
+        }
+
+        .post-score {
+            margin-top: 10px;
+            color: #65676b;
+            font-size: 14px;
+            border-top: 1px solid #f0f2f5;
+            padding-top: 10px;
+        }
+
+        .post-timestamp {
+            color: #65676b;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .feed-info {
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .feed-uri {
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            word-break: break-all;
+        }
+
+        @media (max-width: 600px) {
+            .content {
+                padding: 10px;
+            }
+
+            .post {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Daily SEO Feed Overview</h1>
+    </header>
+    <div class="content">
+        <div class="feed-info">
+            <strong>Feed URI:</strong>
+            <div class="feed-uri">{{ feed_name }}</div>
+        </div>
+
+        {% if message %}
+        <div class="message">
+            {{ message }}
+        </div>
+        {% endif %}
+
+        {% if not posts %}
+            <div class="message">
+                No posts available yet. Please wait while we gather data from the Bluesky network.
+            </div>
+        {% endif %}
+
+        {% for post in posts %}
+        <div class="post">
+            <div class="post-author">@{{ post.author_handle }}</div>
+            <div class="post-text">{{ post.text }}</div>
+            <div class="post-score">
+                Engagement Score: {{ "%.3f"|format(post.engagement_score) }}
+            </div>
+            <div class="post-timestamp">
+                Posted: {{ post.indexed_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>
