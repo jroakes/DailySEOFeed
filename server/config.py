@@ -37,6 +37,7 @@ WEIGHT_COMMENTS = float(os.environ.get("WEIGHT_COMMENTS", "1.0"))
 WEIGHT_RECENCY = float(os.environ.get("WEIGHT_RECENCY", "1.0"))
 POST_LIFETIME_HOURS = int(os.environ.get("POST_LIFETIME_HOURS", "48"))
 MIN_ENGAGEMENT_SCORE = float(os.environ.get("MIN_ENGAGEMENT_SCORE", "0.02"))
+MIN_AUTHOR_ENGAGEMENT = int(os.environ.get("MIN_AUTHOR_ENGAGEMENT", "2"))
 
 # Hosting
 STAGE = os.environ.get("STAGE", "DEV")
