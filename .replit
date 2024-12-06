@@ -1,10 +1,10 @@
 run = "python setup_env.py && python -m server"
 language = "python3"
 hidden = [".config", "**/__pycache__", "**/.mypy_cache", "**/*.pyc"]
-modules = ["python-3.10"]
+modules = ["python-3.12", "web", "nix"]
 
 [nix]
-channel = "stable-22_11"
+channel = "stable-24_05"
 
 [env]
 FLASK_APP = "server"
@@ -29,7 +29,7 @@ pattern = "**/*.py"
 start = "pylsp"
 
 [deployment]
-run = ["sh", "-c", "python -m server"]
+run = ["sh", "-c", "python -m server --debug"]
 deploymentTarget = "gce"
 build = ["sh", "-c", "python setup_env.py"]
 

@@ -34,13 +34,13 @@ _last_cache_reset = time()
 # Velocity scoring windows
 VELOCITY_WINDOWS = [
     ("recent", timedelta(hours=1)),  # Last hour
-    ("mid", timedelta(hours=4)),  # Last 4 hours
+    ("mid", timedelta(hours=6)),  # Last 6 hours
     ("day", timedelta(hours=24)),  # Last 24 hours
 ]
 
 # Scoring weights
 VELOCITY_WEIGHTS = [0.5, 0.3, 0.2]  # Weights for recent, mid, day windows
-SCORE_WEIGHTS = {"base_engagement": 0.4, "quorum": 0.3, "velocity": 0.3}
+SCORE_WEIGHTS = {"base_engagement": 0.4, "quorum": 0.6, "velocity": 0.3}
 
 # Time decay settings
 DECAY_MIDPOINT = 12  # Hours
@@ -87,7 +87,8 @@ def calculate_velocity_score(post: Post) -> float:
         now = get_utc_now()
         # Parse ISO format strings to datetime objects
         timestamps = [
-            datetime.fromisoformat(t) for t in (post.interaction_timestamps or [])
+            datetime.fromisoformat(t)
+            for t in (post.interaction_timestamps or [])
         ]
         velocity_scores = []
 
@@ -123,11 +124,9 @@ def calculate_hotness_score(post: Post) -> float:
     """
     try:
         # Base engagement score
-        engagement_score = (
-            post.likes_count * config.WEIGHT_LIKES
-            + post.reposts_count * config.WEIGHT_REPOSTS
-            + post.replies_count * config.WEIGHT_COMMENTS
-        )
+        engagement_score = (post.likes_count * config.WEIGHT_LIKES +
+                            post.reposts_count * config.WEIGHT_REPOSTS +
+                            post.replies_count * config.WEIGHT_COMMENTS)
         base_score = math.log(max(engagement_score, 1), 10)
 
         # Component scores
@@ -135,17 +134,15 @@ def calculate_hotness_score(post: Post) -> float:
         velocity_score = calculate_velocity_score(post)
 
         # Time decay
-        age_hours = (
-            get_utc_now() - post.indexed_at.replace(tzinfo=timezone.utc)
-        ).total_seconds() / 3600
-        time_decay = 1 / (1 + math.exp((age_hours - DECAY_MIDPOINT) / DECAY_RATE))
+        age_hours = (get_utc_now() - post.indexed_at.replace(
+            tzinfo=timezone.utc)).total_seconds() / 3600
+        time_decay = 1 / (1 + math.exp(
+            (age_hours - DECAY_MIDPOINT) / DECAY_RATE))
 
         # Combine scores with weights
-        final_score = (
-            base_score * SCORE_WEIGHTS["base_engagement"]
-            + quorum_score * SCORE_WEIGHTS["quorum"]
-            + velocity_score * SCORE_WEIGHTS["velocity"]
-        ) * time_decay
+        final_score = (base_score * SCORE_WEIGHTS["base_engagement"] +
+                       quorum_score * SCORE_WEIGHTS["quorum"] +
+                       velocity_score * SCORE_WEIGHTS["velocity"]) * time_decay
 
         return max(final_score * config.WEIGHT_RECENCY, 0.0)
 
@@ -154,7 +151,8 @@ def calculate_hotness_score(post: Post) -> float:
         return 0.0
 
 
-def get_ranked_posts(cursor: Optional[str], limit: int) -> Tuple[List[Post], str]:
+def get_ranked_posts(cursor: Optional[str],
+                     limit: int) -> Tuple[List[Post], str]:
     """
     Get ranked posts ordered by hotness score.
 
@@ -174,7 +172,8 @@ def get_ranked_posts(cursor: Optional[str], limit: int) -> Tuple[List[Post], str
             raise ValueError("Limit must be between 1 and 100")
 
         # Get active posts
-        cutoff_time = get_utc_now() - timedelta(hours=config.POST_LIFETIME_HOURS)
+        cutoff_time = get_utc_now() - timedelta(
+            hours=config.POST_LIFETIME_HOURS)
         query = Post.select().where(Post.indexed_at >= cutoff_time)
 
         # Handle pagination
@@ -201,9 +200,7 @@ def get_ranked_posts(cursor: Optional[str], limit: int) -> Tuple[List[Post], str
         # Set pagination cursor
         next_cursor = (
             f"{scored_posts[-1].engagement_score}::{scored_posts[-1].id}"
-            if len(scored_posts) == limit
-            else CURSOR_EOF
-        )
+            if len(scored_posts) == limit else CURSOR_EOF)
 
         return scored_posts, next_cursor
 

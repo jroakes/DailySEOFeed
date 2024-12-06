@@ -1,4 +1,4 @@
-{pkgs}: {
+{ pkgs }: {
   deps = [
     pkgs.lsof
     pkgs.unixtools.netstat
