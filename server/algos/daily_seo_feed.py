@@ -24,6 +24,7 @@ class PostRanker:
         self._last_cache_reset = time()
         self._cached_df = None
 
+
     def calculate_velocity(self, timestamps: List[str], now: datetime,
                            window_hours: int) -> float:
         """Calculate weighted velocity score."""
@@ -45,10 +46,13 @@ class PostRanker:
 
         return recent_count + (very_recent_count * 0.5)
 
+
     def get_scored_posts(self) -> pd.DataFrame:
         """Get all scored posts from the database."""
+
         cutoff_time = get_utc_now() - timedelta(
             hours=self.config.POST_LIFETIME_HOURS)
+        
         posts = list(Post.select().where(Post.indexed_at >= cutoff_time))
 
         df = self.build_base_df(posts, get_utc_now())
@@ -60,6 +64,7 @@ class PostRanker:
         df = self.calculate_final_scores(df)
 
         return df
+
 
     def build_base_df(self, posts: List[Post], now: datetime) -> pd.DataFrame:
         """Create initial dataframe with post data."""
@@ -93,24 +98,15 @@ class PostRanker:
                     self.rank_config['RECENT_INTERACTION_WINDOW'])
 
                 data.append({
-                    'post_id':
-                    post.id,
-                    'uri':
-                    post.uri,
-                    'cid':
-                    post.cid,
-                    'author_handle':
-                    post.author_handle,
-                    'text':
-                    post.text,
-                    'engagement_score':
-                    float(engagement),
-                    'engaged_authors_count':
-                    engaged_authors_count,
-                    'velocity':
-                    float(velocity),
-                    'indexed_at':
-                    post.indexed_at.replace(tzinfo=timezone.utc)
+                    'post_id': post.id,
+                    'uri': post.uri,
+                    'cid': post.cid,
+                    'author_handle': post.author_handle,
+                    'text': post.text,
+                    'engagement_score': float(engagement),
+                    'engaged_authors_count': engaged_authors_count,
+                    'velocity': float(velocity),
+                    'indexed_at': post.indexed_at.replace(tzinfo=timezone.utc)
                 })
 
             except Exception as e:
@@ -118,13 +114,16 @@ class PostRanker:
                 continue
 
         df = pd.DataFrame(data)
+
         if len(df) == 0:
             return pd.DataFrame(columns=[
                 'post_id', 'uri', 'cid', 'author_handle', 'text',
                 'engagement_score', 'engaged_authors_count', 'velocity',
                 'indexed_at'
             ])
+
         return df
+
 
     def normalize_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize all scoring components to 0-1 range."""
@@ -155,6 +154,7 @@ class PostRanker:
 
         return df
 
+
     def calculate_final_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate weighted final scores."""
         if len(df) == 0:
@@ -172,6 +172,7 @@ class PostRanker:
 
         return df.sort_values(['final_score', 'indexed_at'],
                               ascending=[False, False])
+
 
     def handle_protocol_cursor(self, df: pd.DataFrame,
                                cursor: str) -> pd.DataFrame:
@@ -191,6 +192,7 @@ class PostRanker:
             logger.error(f"Invalid cursor format: {e}")
             return df
 
+
     def get_protocol_cursor(self, df: pd.DataFrame, page_df: pd.DataFrame,
                             limit: int) -> str:
         """Generate cursor in Bluesky protocol format (timestamp::cid)."""
@@ -200,6 +202,7 @@ class PostRanker:
         last_row = page_df.iloc[-1]
         timestamp_ms = int(last_row['indexed_at'].timestamp() * 1000)
         return f"{timestamp_ms}::{last_row['cid']}"
+
 
     def get_posts(self, cursor: Optional[str],
                   limit: int) -> Tuple[List[Dict[str, Any]], str]:
@@ -226,8 +229,18 @@ class PostRanker:
             # Generate next cursor
             next_cursor = self.get_protocol_cursor(df, page_df, limit)
 
-            # Format posts for response
-            feed = [{"post": row['uri']} for _, row in page_df.iterrows()]
+            # Prepare response
+            feed = [
+                {
+                    'uri': row['uri'],
+                    'author_handle': row['author_handle'],
+                    'text': row['text'],
+                    'engagement_score': row['final_score'],
+                    'indexed_at': row['indexed_at']
+                }
+                for _, row in page_df.iterrows()
+            ]
+
 
             return feed, next_cursor
 
@@ -241,6 +254,7 @@ def handler(cursor: Optional[str], limit: int) -> Dict[str, Any]:
     try:
         ranker = PostRanker(config)
         feed, next_cursor = ranker.get_posts(cursor, limit)
+        feed = [{"uri": post["uri"]} for post in feed]  # Format for API response
 
         return {"cursor": next_cursor, "feed": feed}
     except Exception as e:
