@@ -249,14 +249,28 @@ class PostRanker:
             return [], self.config.CURSOR_EOF
 
 
+
 def handler(cursor: Optional[str], limit: int) -> Dict[str, Any]:
-    """API handler function for feed requests."""
+    """API handler function for feed requests.
+    
+    Args:
+        cursor: Optional cursor for pagination
+        limit: Number of posts to return
+        
+    Returns:
+        Dict containing cursor and feed posts in Bluesky's expected format
+    """
     try:
         ranker = PostRanker(config)
         feed, next_cursor = ranker.get_posts(cursor, limit)
-        feed = [{"uri": post["uri"]} for post in feed]  # Format for API response
+        
+        # Format posts according to Bluesky's expected structure
+        formatted_feed = [{"post": post["uri"]} for post in feed]
 
-        return {"cursor": next_cursor, "feed": feed}
+        return {
+            "cursor": next_cursor,
+            "feed": formatted_feed
+        }
     except Exception as e:
         logger.error(f"Handler error: {e}")
         return {"cursor": config.CURSOR_EOF, "feed": []}
