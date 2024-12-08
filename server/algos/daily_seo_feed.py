@@ -126,52 +126,48 @@ class PostRanker:
 
 
     def normalize_scores(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize all scoring components to 0-1 range."""
+        """Normalize scores for engagement, velocity, and quorum."""
+
         if len(df) == 0:
             return df
-
-        # Normalize engagement scores
-        max_engagement = df['engagement_score'].max()
-        df['engagement_norm'] = df[
-            'engagement_score'] / max_engagement if max_engagement > 0 else 0
-
-        # Normalize velocity
-        max_velocity = df['velocity'].max()
-        df['velocity_norm'] = df[
-            'velocity'] / max_velocity if max_velocity > 0 else 0
-
-        # Calculate quorum score
+            
+        # Normalization for engagement
+        df['engagement_norm'] = df['engagement_score'] / df['engagement_score'].max() if df['engagement_score'].max() > 0.0 else 0.0
+        
+        # Normalization for velocity
+        df['velocity_norm'] = df['velocity'] / df['velocity'].max() if df['velocity'].max() > 0.0 else 0.0
+        
+        # Adjusted quorum score calculation
         total_authors = len(author_manager.author_dids)
-        df['quorum_score'] = df[
-            'engaged_authors_count'] / total_authors if total_authors > 0 else 0
+        df['quorum_score'] = df['engaged_authors_count'] / total_authors if total_authors > 0.0 else 0.0
+        df['quorum_norm'] = df['quorum_score'] / df['quorum_score'].max() if df['quorum_score'].max() > 0.0 else 0.0
 
-        # Calculate time decay
-        df['age_hours'] = (pd.Timestamp(get_utc_now()) -
-                           df['indexed_at']).dt.total_seconds() / 3600
-        df['time_decay'] = 1 / (1 + np.exp(
-            (df['age_hours'] - self.rank_config['DECAY_MIDPOINT']) /
-            self.rank_config['DECAY_RATE']))
-
+        # Rest of the function remains the same
+        df['age_hours'] = (pd.Timestamp(get_utc_now()) - df['indexed_at']).dt.total_seconds() / 3600
+        df['time_decay'] = 1 / (1 + np.exp((df['age_hours'] - self.rank_config['DECAY_MIDPOINT']) / self.rank_config['DECAY_RATE']))
+        
         return df
 
 
     def calculate_final_scores(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate weighted final scores."""
+        """Calculate final scores for posts."""
+
         if len(df) == 0:
             return df
 
         weights = self.rank_config['SCORE_WEIGHTS']
-
-        df['final_score'] = (
-            df['engagement_norm'] * weights['BASE_ENGAGEMENT'] +
-            df['quorum_score'] * weights['QUORUM'] +
-            df['velocity_norm'] * weights['VELOCITY']) * df['time_decay']
-
+        
+        # Calculate score with geometric mean approach
+        df['final_score'] = np.mean(
+            [(df['engagement_norm'] * weights['BASE_ENGAGEMENT']),
+            (df['quorum_norm'] * weights['QUORUM']),
+            (df['velocity_norm'] * weights['VELOCITY'])], axis=0
+        ) * df['time_decay']
+        
         # Apply minimum score filter
         df = df[df['final_score'] >= self.rank_config['MIN_ENGAGEMENT_SCORE']]
-
-        return df.sort_values(['final_score', 'indexed_at'],
-                              ascending=[False, False])
+        
+        return df.sort_values(['final_score', 'indexed_at'], ascending=[False, False])
 
 
     def handle_protocol_cursor(self, df: pd.DataFrame,
