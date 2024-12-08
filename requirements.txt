@@ -8,3 +8,4 @@ tqdm
 websocket-client
 zstandard
 pandas
+numpy
