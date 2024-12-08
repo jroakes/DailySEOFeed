@@ -1,5 +1,3 @@
-# daily_seo_feed.py
-
 """Feed ranking algorithm for SEO content."""
 from datetime import timedelta, timezone, datetime
 from typing import List, Dict, Any, Tuple, Optional
@@ -10,6 +8,7 @@ from server import config
 import pandas as pd
 import numpy as np
 from time import time
+
 
 # Feed identifier
 URI = config.DAILY_SEO_FEED_URI
@@ -25,7 +24,6 @@ class PostRanker:
         self.cache_duration = 300  # 5 minutes
         self._last_cache_reset = time()
         self._cached_df = None
-
 
     def calculate_velocity(self, timestamps: List[str], now: datetime, window_hours: int) -> float:
         """Calculate weighted velocity score."""
@@ -46,18 +44,13 @@ class PostRanker:
                 
         return recent_count + (very_recent_count * 0.5)
 
-
     def get_scored_posts(self) -> pd.DataFrame:
-        """Get all scored posts from the database.
-        
-        Returns:
-            DataFrame with scored posts
-        """
+        """Get all scored posts from the database."""
         cutoff_time = get_utc_now() - timedelta(hours=self.config.POST_LIFETIME_HOURS)
         posts = list(Post.select().where(Post.indexed_at >= cutoff_time))
         
         df = self.build_base_df(posts, get_utc_now())
-
+        
         if len(df) == 0:
             return pd.DataFrame()
             
@@ -65,7 +58,6 @@ class PostRanker:
         df = self.calculate_final_scores(df)
         
         return df
-
 
     def build_base_df(self, posts: List[Post], now: datetime) -> pd.DataFrame:
         """Create initial dataframe with post data."""
@@ -81,7 +73,7 @@ class PostRanker:
                     post.replies_count * self.rank_config['WEIGHT_COMMENTS']
                 )
                 
-                # Calculate velocity with new method
+                # Calculate velocity
                 velocity = self.calculate_velocity(
                     post.interaction_timestamps or [],
                     now,
@@ -91,6 +83,7 @@ class PostRanker:
                 data.append({
                     'post_id': post.id,
                     'uri': post.uri,
+                    'cid': post.cid,
                     'author_handle': post.author_handle,
                     'text': post.text,
                     'engagement_score': float(engagement),
@@ -106,12 +99,11 @@ class PostRanker:
         df = pd.DataFrame(data)
         if len(df) == 0:
             return pd.DataFrame(columns=[
-                'post_id', 'uri', 'author_handle', 'text', 
+                'post_id', 'uri', 'cid', 'author_handle', 'text', 
                 'engagement_score', 'engaged_authors_count', 
                 'velocity', 'indexed_at'
             ])
         return df
-
 
     def normalize_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize all scoring components to 0-1 range."""
@@ -137,7 +129,6 @@ class PostRanker:
         
         return df
 
-
     def calculate_final_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate weighted final scores."""
         if len(df) == 0:
@@ -151,33 +142,34 @@ class PostRanker:
             df['velocity_norm'] * weights['VELOCITY']
         ) * df['time_decay']
         
-        return df.sort_values('final_score', ascending=False)
+        return df.sort_values(['final_score', 'indexed_at'], ascending=[False, False])
 
-
-    def _handle_cursor(self, df: pd.DataFrame, cursor: str) -> pd.DataFrame:
-        """Filter dataframe based on cursor position."""
+    def handle_protocol_cursor(self, df: pd.DataFrame, cursor: str) -> pd.DataFrame:
+        """Handle cursor pagination according to Bluesky protocol requirements."""
         if not cursor or cursor == self.config.CURSOR_EOF:
             return df
             
         try:
-            score, post_id = cursor.split("::")
+            indexed_at_ts, cid = cursor.split("::")
+            indexed_at = datetime.fromtimestamp(int(indexed_at_ts) / 1000).replace(tzinfo=timezone.utc)
+            
+            # Filter based on protocol requirements
             return df[
-                (df['final_score'] < float(score)) | 
-                ((df['final_score'] == float(score)) & (df['post_id'] < int(post_id)))
+                ((df['indexed_at'] == indexed_at) & (df['cid'] < cid)) |
+                (df['indexed_at'] < indexed_at)
             ]
-        except (ValueError, TypeError):
-            logger.error(f"Invalid cursor: {cursor}")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid cursor format: {e}")
             return df
 
-
-    def _get_next_cursor(self, df: pd.DataFrame, page_df: pd.DataFrame, limit: int) -> str:
-        """Generate the next cursor based on the current page."""
+    def get_protocol_cursor(self, df: pd.DataFrame, page_df: pd.DataFrame, limit: int) -> str:
+        """Generate cursor in Bluesky protocol format (timestamp::cid)."""
         if len(page_df) == 0 or len(df) <= limit:
             return self.config.CURSOR_EOF
             
         last_row = page_df.iloc[-1]
-        return f"{last_row['final_score']:.6f}::{last_row['post_id']}"
-
+        timestamp_ms = int(last_row['indexed_at'].timestamp() * 1000)
+        return f"{timestamp_ms}::{last_row['cid']}"
 
     def get_posts(self, cursor: Optional[str], limit: int) -> Tuple[List[Dict[str, Any]], str]:
         """Get paginated, ranked posts."""
@@ -190,9 +182,11 @@ class PostRanker:
             if len(df) == 0:
                 return [], self.config.CURSOR_EOF
             
-            # Apply minimum score filter and cursor pagination
+            # Apply minimum score filter
             df = df[df['final_score'] >= self.rank_config['MIN_ENGAGEMENT_SCORE']]
-            df = self._handle_cursor(df, cursor)
+            
+            # Apply cursor pagination
+            df = self.handle_protocol_cursor(df, cursor)
             
             # Get page
             page_df = df.head(limit)
@@ -201,19 +195,10 @@ class PostRanker:
                 return [], self.config.CURSOR_EOF
             
             # Generate next cursor
-            next_cursor = self._get_next_cursor(df, page_df, limit)
+            next_cursor = self.get_protocol_cursor(df, page_df, limit)
             
-            # Prepare response
-            feed = [
-                {
-                    'uri': row['uri'],
-                    'author_handle': row['author_handle'],
-                    'text': row['text'],
-                    'engagement_score': row['final_score'],
-                    'indexed_at': row['indexed_at']
-                }
-                for _, row in page_df.iterrows()
-            ]
+            # Format posts for response
+            feed = [{"post": row['uri']} for _, row in page_df.iterrows()]
             
             return feed, next_cursor
             
@@ -222,13 +207,19 @@ class PostRanker:
             return [], self.config.CURSOR_EOF
 
 
-
 def handler(cursor: Optional[str], limit: int) -> Dict[str, Any]:
     """API handler function for feed requests."""
-    ranker = PostRanker(config)
-    feed, next_cursor = ranker.get_posts(cursor, limit)
-    feed = [{"uri": post["uri"]} for post in feed]  # Format for API response
-    return {
-        "cursor": next_cursor,
-        "feed": feed
-    }
+    try:
+        ranker = PostRanker(config)
+        feed, next_cursor = ranker.get_posts(cursor, limit)
+        
+        return {
+            "cursor": next_cursor,
+            "feed": feed
+        }
+    except Exception as e:
+        logger.error(f"Handler error: {e}")
+        return {
+            "cursor": config.CURSOR_EOF,
+            "feed": []
+        }
